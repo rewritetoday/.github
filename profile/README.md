@@ -1,56 +1,57 @@
 <div align="center">
 
-# Remessage Open Source
+# Rewrite
 
-**SMS do jeito que deveria ser** — simples, previsível e absurdamente barato.
-Envie SMS transacionais e OTPs com **taxa fixa de US$ 0.01 por mensagem**, sem contratos, sem surpresas e sem burocracia.
+**SMS the way it should be** — simple, predictable and absurdly cheap.
+Send transactional SMS and OTPs with **flat rate of U$0.01 per message**, no contracts, no surprises and no paperwork.
 
-Feito para devs que querem **confiabilidade, DX excelente e controle total** sobre envios de SMS.
+Made for devs who want **reliability, excellent DX and total control** over SMS sending.
 
-## Integre em poucas linhas
+## Integrate in a few lines
 
 </div>
 
 ```ts
-import { Remessage } from 'remessage'
+import { Rewrite } from 'rewritejs'
 
-const client = new Remessage(process.env.REMESSAGE_API_KEY)
+const client = new Rewrite(process.env.REWRITE_API_KEY)
 
 await client.messages.send({
-    from: 'Remessage',
+    from: 'Rewrite',
     to: '+5511999999999',
-    content: 'Seu código de verificação é 482931',
+    content: 'You verification code is 482931',
 });
 ```
+
 <div align="center">
 
-Simples assim, o jeito **Remessage** de ser.
+Just like that, the **Rewrite** way of being.
 
-## Não fique preso a um único provedor
+## Don't get stuck with a single provider
 
-O **Remessage** não é apenas um gateway — é uma **camada de abstração**.
+**Rewrite** isn't just a gateway — it's an **abstraction layer**.
 
-Você pode usar o Remessage com **múltiplos provedores de SMS**, alternando ou combinando conforme preço, entrega ou região:
+You can use Rewrite with **multiple SMS providers**, switching or combining depending on price, delivery or region
 
 </div>
 
 - Twilio
 - Zenvia
-- SMPP direto
-- Outros provedores compatíveis
+- Direct SMPP
+- Other supported providers
 
 <div align="center">
 
-Tudo usando **a mesma API**, os mesmos webhooks e a mesma DX.
+All using **the same API**, the same webhooks and the same **DX**.
 
-Troque de provedor sem reescrever seu código.
+Switch providers without rewriting your code.
 
-## Junte-se à revolução do SMS
+## Join the SMS revolution
 
-O **Remessage** nasce open source porque acreditamos que infraestrutura crítica **não deveria ser uma caixa-preta.**
+**Rewrite** was born open source because we believe that critical infrastructure **should not be a black box.**
 
-Contribua, discuta ideias e ajude a construir o futuro do envio de SMS simples e acessível.
+Contribute, discuss ideas, and help build the future of simple, affordable SMS messaging.
 
-**Remessage** — SMS do jeito que deveria ser.
+**Rewrite** — SMS the way it should be.
 
 </div>
