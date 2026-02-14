@@ -24,7 +24,7 @@ body:
     id: version
     attributes:
       label: Package / Version
-      placeholder: "@remessages/react@v1.0.0"
+      placeholder: "@rewritejs/react@v1.0.0"
 
   - type: textarea
     id: logs
