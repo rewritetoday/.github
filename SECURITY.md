@@ -8,7 +8,7 @@ This document describes how to responsibly report security vulnerabilities
 found in any Rewrite open-source project.
 
 ---
-https://github.com/AbacatePay/.github/blob/main/SECURITY.md
+https://github.com/RewriteToday/.github/blob/main/SECURITY.md
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability, **do not open a public GitHub Issue**.
