@@ -16,7 +16,7 @@ Type-safe SDKs for the languages your team already ships with.
 </div>
 
 ```ts
-import { Rewrite } from '@rewritejs/sdk';
+import { Rewrite } from '@rewritetoday/sdk';
 
 const client = new Rewrite(process.env.REWRITE_API_KEY);
 
