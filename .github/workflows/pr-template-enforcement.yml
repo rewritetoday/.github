@@ -1,0 +1,267 @@
+name: PR Template Enforcement
+
+on:
+  pull_request_target:
+  merge_group:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  validate-pr-template:
+    name: Validate PR template
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate pull request body against the org template
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          const eventName = process.env.GITHUB_EVENT_NAME;
+          const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+          const apiBaseUrl = `${process.env.GITHUB_API_URL}/repos/${owner}/${repo}`;
+          const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY;
+
+          const requiredChecklistItems = [
+            'Docs updated',
+            'CI passing',
+            'I followed the CONTRIBUTING guidelines',
+            'I added or updated tests (if applicable)',
+            'I tested in localhost',
+            'I added images (Frontend-only)',
+          ];
+
+          const marker = '<!-- rewrite-pr-template-enforcer -->';
+
+          function escapeRegex(value) {
+            return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          }
+
+          function appendStepSummary(content) {
+            if (stepSummaryPath) {
+              fs.appendFileSync(stepSummaryPath, content);
+            }
+          }
+
+          function extractSection(body, heading) {
+            const headingPattern = escapeRegex(heading);
+            const headingRegex = new RegExp(`^## ${headingPattern}\\s*$`, 'mi');
+            const headingMatch = headingRegex.exec(body);
+
+            if (!headingMatch || headingMatch.index === undefined) {
+              return null;
+            }
+
+            const contentStart = headingMatch.index + headingMatch[0].length;
+            const remainingBody = body.slice(contentStart);
+            const nextHeadingIndex = remainingBody.search(/^##\s+/m);
+            const sectionBody = nextHeadingIndex === -1
+              ? remainingBody
+              : remainingBody.slice(0, nextHeadingIndex);
+
+            return sectionBody.trim();
+          }
+
+          function validatePullRequestBody(body) {
+            const violations = [];
+
+            const summary = extractSection(body, 'Summary');
+            const relatedIssue = extractSection(body, 'Related Issue');
+            const whatChanged = extractSection(body, 'What changed');
+            const breakingChanges = extractSection(body, 'Breaking changes');
+            const checklist = extractSection(body, 'Checklist');
+            const additionalContext = extractSection(body, 'Additional context');
+
+            if (summary === null) {
+              violations.push('falta a secao `## Summary`');
+            } else if (!summary || summary.includes('One-paragraph explanation of the change.')) {
+              violations.push('a secao `## Summary` precisa ser preenchida com uma descricao real da mudanca');
+            }
+
+            if (relatedIssue === null) {
+              violations.push('falta a secao `## Related Issue`');
+            } else if (!relatedIssue) {
+              violations.push('a secao `## Related Issue` nao pode ficar vazia');
+            }
+
+            if (whatChanged === null) {
+              violations.push('falta a secao `## What changed`');
+            } else {
+              const filledItems = whatChanged
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter((line) => /^[-*]\s+/.test(line))
+                .map((line) => line.replace(/^[-*]\s+/, '').trim())
+                .filter(Boolean)
+                .filter((line) => line !== '-');
+
+              if (filledItems.length === 0) {
+                violations.push('a secao `## What changed` precisa ter pelo menos um item preenchido');
+              }
+            }
+
+            if (breakingChanges === null) {
+              violations.push('falta a secao `## Breaking changes`');
+            } else {
+              const hasYesOption = /-\s*\[[ xX]\]\s*Yes\b/m.test(breakingChanges);
+              const hasNoOption = /-\s*\[[ xX]\]\s*No\b/m.test(breakingChanges);
+              const yesChecked = /-\s*\[[xX]\]\s*Yes\b/m.test(breakingChanges);
+              const noChecked = /-\s*\[[xX]\]\s*No\b/m.test(breakingChanges);
+
+              if (!hasYesOption || !hasNoOption) {
+                violations.push('a secao `## Breaking changes` precisa manter as opcoes `Yes` e `No` do template');
+              } else if (Number(yesChecked) + Number(noChecked) !== 1) {
+                violations.push('a secao `## Breaking changes` precisa marcar exatamente uma opcao: `Yes` ou `No`');
+              }
+            }
+
+            if (checklist === null) {
+              violations.push('falta a secao `## Checklist`');
+            } else {
+              const missingChecklistItems = requiredChecklistItems.filter(
+                (item) => !new RegExp(`^-\\s*\\[[ xX]\\]\\s*${escapeRegex(item)}\\s*$`, 'm').test(checklist)
+              );
+
+              if (missingChecklistItems.length > 0) {
+                violations.push(
+                  `a secao \`## Checklist\` precisa manter todos os itens do template. Faltando: ${missingChecklistItems
+                    .map((item) => `\`${item}\``)
+                    .join(', ')}`
+                );
+              }
+            }
+
+            if (additionalContext === null) {
+              violations.push('falta a secao `## Additional context`');
+            }
+
+            return violations;
+          }
+
+          function buildCommentBody(violations) {
+            return [
+              marker,
+              '## PR fora do padrao',
+              '',
+              'Este PR nao segue o padrao definido em `pull_request_template.md`.',
+              '',
+              'Corrija os pontos abaixo na descricao do PR:',
+              ...violations.map((violation) => `- ${violation}`),
+              '',
+              'Depois de ajustar a descricao, rode novamente este workflow ou envie um novo commit para atualizar o check.',
+            ].join('\n');
+          }
+
+          async function githubRequest(path, options = {}) {
+            const response = await fetch(`${apiBaseUrl}${path}`, {
+              ...options,
+              headers: {
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+                ...(options.headers || {}),
+              },
+            });
+
+            if (!response.ok) {
+              const responseBody = await response.text();
+              throw new Error(`GitHub API ${response.status} for ${path}: ${responseBody}`);
+            }
+
+            if (response.status === 204) {
+              return null;
+            }
+
+            return response.json();
+          }
+
+          async function upsertComment(issueNumber, commentBody) {
+            const comments = await githubRequest(`/issues/${issueNumber}/comments?per_page=100`);
+            const existingComment = comments.find((comment) => (comment.body || '').includes(marker));
+
+            if (existingComment) {
+              if (existingComment.body !== commentBody) {
+                await githubRequest(`/issues/comments/${existingComment.id}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({ body: commentBody }),
+                });
+
+                return 'updated';
+              }
+
+              return 'unchanged';
+            }
+
+            await githubRequest(`/issues/${issueNumber}/comments`, {
+              method: 'POST',
+              body: JSON.stringify({ body: commentBody }),
+            });
+
+            return 'created';
+          }
+
+          async function deleteExistingComment(issueNumber) {
+            const comments = await githubRequest(`/issues/${issueNumber}/comments?per_page=100`);
+            const existingComment = comments.find((comment) => (comment.body || '').includes(marker));
+
+            if (!existingComment) {
+              return false;
+            }
+
+            await githubRequest(`/issues/comments/${existingComment.id}`, { method: 'DELETE' });
+            return true;
+          }
+
+          async function main() {
+            if (eventName === 'merge_group') {
+              appendStepSummary('## PR template check\n\nSkipped body validation on `merge_group`; the PR should already have passed this check before entering the merge queue.\n');
+              console.log('Skipping PR body validation for merge_group.');
+              return;
+            }
+
+            const pullRequest = event.pull_request;
+
+            if (!pullRequest) {
+              throw new Error(`Unsupported event payload for ${eventName}: no pull_request found.`);
+            }
+
+            const body = pullRequest.body || '';
+            const violations = validatePullRequestBody(body);
+
+            if (violations.length > 0) {
+              const commentStatus = await upsertComment(pullRequest.number, buildCommentBody(violations));
+
+              appendStepSummary(
+                `## PR template check\n\nStatus: failed\n\n${violations
+                  .map((violation) => `- ${violation}`)
+                  .join('\n')}\n\nComment: ${commentStatus}\n`
+              );
+
+              console.error('PR body does not match the org pull request template.');
+              violations.forEach((violation) => console.error(`- ${violation}`));
+              process.exitCode = 1;
+              return;
+            }
+
+            const deletedComment = await deleteExistingComment(pullRequest.number);
+            appendStepSummary(
+              `## PR template check\n\nStatus: passed\n\nThe pull request body matches the required template.${deletedComment ? ' Removed the previous enforcement comment.' : ''}\n`
+            );
+            console.log('PR body matches the org pull request template.');
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
